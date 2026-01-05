@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, List
 import logging
 import sys
+import os  # Add os import
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -41,14 +42,7 @@ import seaborn as sns
 
 from src.config import CONFIG
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("logs/training.log"), logging.StreamHandler()],
-)
-logger = logging.getLogger(__name__)
-
+# Don't configure logging at module level - do it in the class
 
 class HeartDiseaseModelTrainer:
     """Model trainer for heart disease prediction"""
@@ -71,12 +65,32 @@ class HeartDiseaseModelTrainer:
         self.best_model_name = None
         self.results = {}
 
-        # Create directories
+        # Create directories FIRST
         self.create_directories()
-
+        
+        # THEN configure logging
+        self.setup_logging()
+        
         # Setup MLflow
         mlflow.set_tracking_uri(self.config.mlflow.tracking_uri)
         mlflow.set_experiment(self.config.mlflow.experiment_name)
+
+    def setup_logging(self):
+        """Configure logging after directories are created"""
+        # Create logs directory if it doesn't exist
+        os.makedirs('logs', exist_ok=True)
+        
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler("logs/training.log"),
+                logging.StreamHandler()
+            ],
+        )
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Logging configured successfully")
 
     def create_directories(self):
         """Create necessary directories"""
@@ -85,11 +99,11 @@ class HeartDiseaseModelTrainer:
             'logs',
             'reports',
             'reports/figures',
-            'mlruns'  # Add MLflow directory
+            'mlruns'
         ]
-        
+
         for directory in directories:
-            Path(directory).mkdir(exist_ok=True)
+            Path(directory).mkdir(parents=True, exist_ok=True)
 
     def load_data(self) -> pd.DataFrame:
         """
@@ -98,11 +112,11 @@ class HeartDiseaseModelTrainer:
         Returns:
             pd.DataFrame: Processed data
         """
-        logger.info("Loading data...")
+        self.logger.info("Loading data...")
 
         try:
             self.data = pd.read_csv(self.config.data.processed_path)
-            logger.info(f"Data loaded successfully. Shape: {self.data.shape}")
+            self.logger.info(f"Data loaded successfully. Shape: {self.data.shape}")
 
             # Separate features and target
             X = self.data[self.config.data.numerical_features + self.config.data.categorical_features]
@@ -117,15 +131,15 @@ class HeartDiseaseModelTrainer:
                 stratify=y,
             )
 
-            logger.info(f"Train set: {self.X_train.shape}")
-            logger.info(f"Test set: {self.X_test.shape}")
-            logger.info(f"Class distribution in train: {self.y_train.value_counts().to_dict()}")
-            logger.info(f"Class distribution in test: {self.y_test.value_counts().to_dict()}")
+            self.logger.info(f"Train set: {self.X_train.shape}")
+            self.logger.info(f"Test set: {self.X_test.shape}")
+            self.logger.info(f"Class distribution in train: {self.y_train.value_counts().to_dict()}")
+            self.logger.info(f"Class distribution in test: {self.y_test.value_counts().to_dict()}")
 
             return self.data
 
         except Exception as e:
-            logger.error(f"Error loading data: {e}")
+            self.logger.error(f"Error loading data: {e}")
             raise
 
     def create_preprocessor(self) -> ColumnTransformer:
@@ -135,7 +149,7 @@ class HeartDiseaseModelTrainer:
         Returns:
             ColumnTransformer: Fitted preprocessor
         """
-        logger.info("Creating preprocessor...")
+        self.logger.info("Creating preprocessor...")
 
         numerical_transformer = Pipeline(steps=[("scaler", StandardScaler())])
 
@@ -163,7 +177,7 @@ class HeartDiseaseModelTrainer:
         with open(preprocessor_path, "wb") as f:
             pickle.dump(self.preprocessor, f)
 
-        logger.info(f"Preprocessor saved to {preprocessor_path}")
+        self.logger.info(f"Preprocessor saved to {preprocessor_path}")
 
         return self.preprocessor
 
@@ -174,7 +188,7 @@ class HeartDiseaseModelTrainer:
         Returns:
             Dict[str, Any]: Training results
         """
-        logger.info("Training models...")
+        self.logger.info("Training models...")
 
         # Transform data
         X_train_transformed = self.preprocessor.transform(self.X_train)
@@ -200,7 +214,7 @@ class HeartDiseaseModelTrainer:
             mlflow.log_param("n_features", X_train_transformed.shape[1])
 
             for model_name, model_info in models.items():
-                logger.info(f"Training {model_name}...")
+                self.logger.info(f"Training {model_name}...")
 
                 with mlflow.start_run(run_name=model_name, nested=True):
                     # Hyperparameter tuning
@@ -253,9 +267,9 @@ class HeartDiseaseModelTrainer:
                     self.plot_roc_curve(self.y_test, y_pred_proba, model_name)
                     self.plot_confusion_matrix(self.y_test, y_pred, model_name)
 
-                    logger.info(f"{model_name} - Best params: {grid_search.best_params_}")
-                    logger.info(f"{model_name} - CV Score: {grid_search.best_score_:.4f}")
-                    logger.info(f"{model_name} - Test Accuracy: {metrics['accuracy']:.4f}")
+                    self.logger.info(f"{model_name} - Best params: {grid_search.best_params_}")
+                    self.logger.info(f"{model_name} - CV Score: {grid_search.best_score_:.4f}")
+                    self.logger.info(f"{model_name} - Test Accuracy: {metrics['accuracy']:.4f}")
 
             # Select best model
             self.select_best_model()
@@ -364,11 +378,11 @@ class HeartDiseaseModelTrainer:
         self.best_model_name = best_model_name
         self.best_model = self.results[best_model_name]["model"]
 
-        logger.info(f"Best model: {best_model_name} with ROC-AUC: {best_score:.4f}")
+        self.logger.info(f"Best model: {best_model_name} with ROC-AUC: {best_score:.4f}")
 
     def save_best_model(self):
         """Save the best model and results"""
-        logger.info("Saving best model...")
+        self.logger.info("Saving best model...")
 
         # Save best model
         model_path = "models/best_model.pkl"
@@ -398,8 +412,8 @@ class HeartDiseaseModelTrainer:
         # Create model card
         self.create_model_card()
 
-        logger.info(f"Best model saved to {model_path}")
-        logger.info(f"Results saved to reports/model_results.json")
+        self.logger.info(f"Best model saved to {model_path}")
+        self.logger.info(f"Results saved to reports/model_results.json")
 
     def create_model_card(self):
         """Create model card for documentation"""
@@ -455,7 +469,7 @@ class HeartDiseaseModelTrainer:
         with open("reports/model_card.md", "w") as f:
             f.write(model_card)
 
-        logger.info("Model card created at reports/model_card.md")
+        self.logger.info("Model card created at reports/model_card.md")
 
     def print_summary(self):
         """Print training summary"""
@@ -490,9 +504,7 @@ class HeartDiseaseModelTrainer:
 def main():
     """Main training function"""
     try:
-        logger.info("Starting model training pipeline...")
-
-        # Initialize trainer
+        # Initialize trainer - this will create directories and setup logging
         trainer = HeartDiseaseModelTrainer(CONFIG)
 
         # Load data
@@ -510,12 +522,12 @@ def main():
         # Print summary
         trainer.print_summary()
 
-        logger.info("Training pipeline completed successfully!")
+        trainer.logger.info("Training pipeline completed successfully!")
 
     except Exception as e:
-        logger.error(f"Error in training pipeline: {e}")
+        # Use print as fallback if logging isn't configured
+        print(f"Error in training pipeline: {e}")
         raise
-
 
 if __name__ == "__main__":
     main()
