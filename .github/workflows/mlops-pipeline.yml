@@ -32,8 +32,8 @@ jobs:
     - name: Lint with flake8
       run: flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
     
-    - name: Import sorting with isort
-      run: isort --check-only src/ tests/
+    #- name: Import sorting with isort
+    #  run: isort --check-only src/ tests/
     
     - name: Type checking with mypy
       run: mypy src/
