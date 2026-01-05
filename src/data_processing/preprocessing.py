@@ -4,7 +4,7 @@ Data preprocessing module for heart disease dataset
 
 import pandas as pd
 import numpy as np
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
@@ -14,8 +14,9 @@ class DataPreprocessor:
 
     def __init__(self):
         self.scaler = StandardScaler()
-        self.encoder = OneHotEncoder(drop="first", sparse_output=False)
+        self.encoder = OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore")
         self.preprocessor = None
+        self._is_fitted = False
 
     def handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -36,7 +37,7 @@ class DataPreprocessor:
                 df_clean[col] = df_clean[col].fillna(df_clean[col].median())
         
         # Fill categorical columns with mode
-        categorical_cols = ['sex', 'cp', 'fbs', 'restecg', 'exang', 'slope']
+        categorical_cols = ['sex', 'cp', 'fbs', 'restecg', 'exang', 'slope', 'ca', 'thal']
         for col in categorical_cols:
             if col in df_clean.columns and df_clean[col].isnull().any():
                 mode_val = df_clean[col].mode()[0] if not df_clean[col].mode().empty else 0
@@ -79,6 +80,7 @@ class DataPreprocessor:
         existing_features = [col for col in numerical_features if col in df_clean.columns]
         
         if existing_features:
+            # Fit and transform
             scaled_data = self.scaler.fit_transform(df_clean[existing_features])
             scaled_df = pd.DataFrame(
                 scaled_data, 
@@ -106,6 +108,7 @@ class DataPreprocessor:
         existing_features = [col for col in categorical_features if col in df_clean.columns]
         
         if existing_features:
+            # Fit and transform
             encoded_data = self.encoder.fit_transform(df_clean[existing_features])
             encoded_cols = self.encoder.get_feature_names_out(existing_features)
             encoded_df = pd.DataFrame(
@@ -134,48 +137,76 @@ class DataPreprocessor:
         # Convert target to binary
         df_clean = self.convert_target_to_binary(df_clean)
         
-        # Create preprocessor
+        # Extract features and target
         numerical_features = config.get('numerical_features', [])
         categorical_features = config.get('categorical_features', [])
+        target_col = config.get('target', 'target')
         
-        # Create column transformer
-        transformers = []
+        # Ensure columns exist
+        numerical_features = [col for col in numerical_features if col in df_clean.columns]
+        categorical_features = [col for col in categorical_features if col in df_clean.columns]
         
-        if numerical_features:
-            numerical_features = [col for col in numerical_features if col in df_clean.columns]
+        # Check if we have both feature types
+        if numerical_features or categorical_features:
+            # Create transformers
+            transformers = []
+            
             if numerical_features:
                 transformers.append(('num', StandardScaler(), numerical_features))
-        
-        if categorical_features:
-            categorical_features = [col for col in categorical_features if col in df_clean.columns]
+            
             if categorical_features:
-                transformers.append(('cat', OneHotEncoder(drop='first', sparse_output=False), categorical_features))
-        
-        if transformers:
-            self.preprocessor = ColumnTransformer(transformers=transformers)
+                transformers.append(('cat', OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore'), 
+                                   categorical_features))
+            
+            # Create and fit preprocessor
+            self.preprocessor = ColumnTransformer(transformers=transformers, remainder='drop')
             
             # Fit and transform
             X = df_clean[numerical_features + categorical_features]
-            y = df_clean[config.get('target', 'target')]
+            y = df_clean[target_col]
             
             X_transformed = self.preprocessor.fit_transform(X)
+            self._is_fitted = True
             
             # Get feature names
             feature_names = []
-            for name, transformer, features in transformers:
+            for name, transformer, features in self.preprocessor.transformers_:
                 if name == 'num':
                     feature_names.extend(features)
                 elif name == 'cat':
+                    # Get feature names from fitted encoder
                     encoder = transformer
-                    encoded_names = encoder.get_feature_names_out(features)
-                    feature_names.extend(encoded_names)
+                    if hasattr(encoder, 'get_feature_names_out'):
+                        encoded_names = encoder.get_feature_names_out(features)
+                        feature_names.extend(encoded_names)
+                    else:
+                        # Fallback for older sklearn versions
+                        for feature in features:
+                            unique_vals = df_clean[feature].dropna().unique()
+                            for val in sorted(unique_vals)[1:]:  # Skip first due to drop='first'
+                                feature_names.append(f"{feature}_{val}")
             
-            X_df = pd.DataFrame(X_transformed, columns=feature_names)
+            X_df = pd.DataFrame(X_transformed, columns=feature_names, index=df_clean.index)
             
             return X_df, y
         
         else:
             # Return original features if no preprocessing needed
-            X = df_clean.drop(columns=[config.get('target', 'target')])
-            y = df_clean[config.get('target', 'target')]
+            X = df_clean.drop(columns=[target_col])
+            y = df_clean[target_col]
             return X, y
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transform new data using fitted preprocessor
+        
+        Args:
+            df (pd.DataFrame): New data to transform
+            
+        Returns:
+            pd.DataFrame: Transformed data
+        """
+        if not self._is_fitted or self.preprocessor is None:
+            raise ValueError("Preprocessor must be fitted before transforming data")
+        
+        return self.preprocessor.transform(df)
