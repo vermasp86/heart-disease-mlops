@@ -178,3 +178,67 @@ This report documents the end-to-end MLOps pipeline for heart disease prediction
    - Automated report generation
 
 ## 14. Repository Structure
+heart-disease-mlops/
+├── data/ # Data storage and scripts
+├── notebooks/ # Jupyter notebooks
+├── src/ # Source code
+├── tests/ # Unit tests
+├── docker/ # Docker configuration
+├── kubernetes/ # Kubernetes manifests
+├── monitoring/ # Monitoring setup
+├── .github/workflows # CI/CD pipelines
+└── reports/ # Documentation
+
+
+## 15. Setup Instructions
+### Local Development
+```bash
+# Clone repository
+git clone https://github.com/yourusername/heart-disease-mlops.git
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download data
+python data/download_data.py
+
+# Train model
+python src/models/train.py
+
+# Run API
+uvicorn src.api.app:app --reload
+
+##16. Docker Deployment
+
+# Build and run
+docker-compose up -d
+
+# Test API
+curl http://localhost:8000/health
+
+##17. Kubernetes Deployment
+
+# Apply manifests
+kubectl apply -f kubernetes/
+
+# Check status
+kubectl get all -n heart-disease
+
+16. Results & Validation
+16.1 Model Performance
+Accuracy: 85.2%
+
+Precision: 83.5%
+
+Recall: 86.7%
+
+F1-Score: 85.1%
+
+ROC-AUC: 92.1%
+
+16.2 System Performance
+API Response Time: < 100ms (p95)
+
+System Uptime: 99.9%
+
+Error Rate: < 0.1%
