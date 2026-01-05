@@ -10,10 +10,47 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, List
 import logging
 import sys
-import os  # Add os import
+import os
 
 # Add src to path
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Try to import config, but have a fallback
+try:
+    from src.config import CONFIG
+    config_available = True
+except ImportError as e:
+    print(f"Warning: Could not import src.config: {e}. Using minimal configuration.")
+    config_available = False
+    
+    # Create a minimal config class as fallback
+    class MinimalConfig:
+        class DataConfig:
+            processed_path = "data/processed/heart_disease_processed.csv"
+            numerical_features = ["age", "trestbps", "chol", "thalach", "oldpeak"]
+            categorical_features = ["sex", "cp", "fbs", "restecg", "exang", "slope"]
+            target = "target"
+            test_size = 0.2
+            random_state = 42
+        
+        class ModelConfig:
+            random_state = 42
+            test_size = 0.2
+            cv_folds = 5
+            scoring_metric = "roc_auc"
+            logistic_regression_params = {"C": [0.1, 1.0], "penalty": ["l2"]}
+            random_forest_params = {"n_estimators": [10, 20], "max_depth": [5, 10]}
+        
+        class MLflowConfig:
+            tracking_uri = "mlruns"
+            experiment_name = "heart_disease_prediction"
+            registered_model_name = "HeartDiseaseClassifier"
+        
+        data = DataConfig()
+        model = ModelConfig()
+        mlflow = MLflowConfig()
+    
+    CONFIG = MinimalConfig()
 
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
