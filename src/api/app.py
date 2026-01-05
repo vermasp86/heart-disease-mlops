@@ -13,24 +13,11 @@ import time
 from typing import List, Optional, Dict, Any
 import pandas as pd
 from datetime import datetime
+import os  # Add os import
 
 # Monitoring imports
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import prometheus_client
-
-# Configure logging
-import os
-os.makedirs('logs', exist_ok=True)  # Create logs directory if it doesn't exist
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("logs/api.log"),
-        logging.StreamHandler()
-    ],
-)
-logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -61,6 +48,21 @@ PREDICTION_COUNT = Counter("predictions_total", "Total predictions made", ["pred
 MODEL = None
 PREPROCESSOR = None
 
+# Configure logging in startup event
+@app.on_event("startup")
+async def setup_logging():
+    """Setup logging on startup"""
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler("logs/api.log"), logging.StreamHandler()],
+    )
+    global logger
+    logger = logging.getLogger(__name__)
+    logger.info("API logging configured successfully")
 
 class PatientData(BaseModel):
     """Patient data model for prediction"""
