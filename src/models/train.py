@@ -80,8 +80,14 @@ class HeartDiseaseModelTrainer:
 
     def create_directories(self):
         """Create necessary directories"""
-        directories = ["models", "logs", "reports", "reports/figures"]
-
+        directories = [
+            'models',
+            'logs',
+            'reports',
+            'reports/figures',
+            'mlruns'  # Add MLflow directory
+        ]
+        
         for directory in directories:
             Path(directory).mkdir(exist_ok=True)
 
