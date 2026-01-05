@@ -11,7 +11,7 @@ plotly==5.17.0
 
 # MLOps & Tracking
 mlflow==2.8.1
-dvc==3.0.3
+dvc
 
 # API & Deployment
 fastapi==0.104.1
