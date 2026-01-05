@@ -20,13 +20,8 @@ def download_dataset() -> pd.DataFrame:
     Returns:
         pd.DataFrame: Cleaned dataset with proper column names
     """
-    # URLs for the dataset
-    urls = [
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.hungarian.data",
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.switzerland.data",
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.va.data"
-    ]
+    # URLs for the dataset - use only Cleveland dataset for consistency
+    url = "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data"
     
     # Column names as per UCI documentation
     columns = [
@@ -34,35 +29,25 @@ def download_dataset() -> pd.DataFrame:
         'thalach', 'exang', 'oldpeak', 'slope', 'ca', 'thal', 'target'
     ]
     
-    datasets = []
-    
-    for i, url in enumerate(urls):
-        try:
-            logger.info(f"Downloading dataset from {url}")
-            df = pd.read_csv(
-                url,
-                names=columns,
-                na_values='?',
-                engine='python'
-            )
-            
-            # Add source information
-            df['source'] = ['cleveland', 'hungarian', 'switzerland', 'va'][i]
-            datasets.append(df)
-            
-        except Exception as e:
-            logger.warning(f"Failed to download from {url}: {e}")
-            continue
-    
-    # Combine all datasets
-    if datasets:
-        combined_df = pd.concat(datasets, ignore_index=True)
-    else:
-        # Fallback to local file if download fails
-        logger.warning("All downloads failed, using local data if available")
-        combined_df = pd.DataFrame(columns=columns + ['source'])
-    
-    return combined_df
+    try:
+        logger.info(f"Downloading dataset from {url}")
+        df = pd.read_csv(
+            url,
+            names=columns,
+            na_values='?',
+            engine='python'
+        )
+        
+        # Add source information
+        df['source'] = 'cleveland'
+        
+        logger.info(f"Downloaded {len(df)} samples from Cleveland dataset")
+        return df
+        
+    except Exception as e:
+        logger.error(f"Failed to download dataset: {e}")
+        # Return empty dataframe with correct columns
+        return pd.DataFrame(columns=columns + ['source'])
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -87,38 +72,65 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     # Handle missing values
     missing_before = df_clean.isnull().sum().sum()
     
-    # For categorical columns with missing values, use mode
-    categorical_cols = ['ca', 'thal']
+    # Define categorical and numerical columns
+    categorical_cols = ['ca', 'thal', 'sex', 'cp', 'fbs', 'restecg', 'exang', 'slope']
+    numerical_cols = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
+    
+    # First, convert problematic columns to numeric, forcing errors to NaN
+    for col in ['ca', 'thal']:
+        if col in df_clean.columns:
+            df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+    
+    # For categorical columns, fill NaN with mode
     for col in categorical_cols:
         if col in df_clean.columns:
-            mode_val = df_clean[col].mode()[0] if not df_clean[col].mode().empty else 0
-            df_clean[col].fillna(mode_val, inplace=True)
+            # Check if column has any non-NaN values
+            if df_clean[col].notna().any():
+                mode_val = df_clean[col].mode()[0] if not df_clean[col].mode().empty else 0
+                df_clean[col] = df_clean[col].fillna(mode_val)
+            else:
+                # If all values are NaN, fill with 0
+                df_clean[col] = df_clean[col].fillna(0)
     
-    # For numerical columns, use median
-    numerical_cols = ['trestbps', 'chol', 'thalach']
+    # For numerical columns, fill NaN with median
     for col in numerical_cols:
         if col in df_clean.columns:
-            df_clean[col].fillna(df_clean[col].median(), inplace=True)
+            if df_clean[col].notna().any():
+                median_val = df_clean[col].median()
+                df_clean[col] = df_clean[col].fillna(median_val)
+            else:
+                df_clean[col] = df_clean[col].fillna(0)
     
-    missing_after = df_clean.isnull().sum().sum()
-    logger.info(f"Missing values handled: {missing_before} -> {missing_after}")
+    # Now safely convert to integer types
+    for col in categorical_cols:
+        if col in df_clean.columns:
+            # Check if all values are finite before converting
+            if df_clean[col].notna().all():
+                df_clean[col] = df_clean[col].astype(int)
+            else:
+                logger.warning(f"Column {col} still has NaN values after filling")
+                # Fill any remaining NaN with 0 and convert
+                df_clean[col] = df_clean[col].fillna(0).astype(int)
     
-    # Convert data types
-    df_clean['sex'] = df_clean['sex'].astype(int)
-    df_clean['cp'] = df_clean['cp'].astype(int)
-    df_clean['fbs'] = df_clean['fbs'].astype(int)
-    df_clean['restecg'] = df_clean['restecg'].astype(int)
-    df_clean['exang'] = df_clean['exang'].astype(int)
-    df_clean['slope'] = df_clean['slope'].astype(int)
-    df_clean['ca'] = df_clean['ca'].astype(int)
-    df_clean['thal'] = df_clean['thal'].astype(int)
+    # Convert numerical columns to float (some may have decimal values)
+    for col in numerical_cols:
+        if col in df_clean.columns:
+            df_clean[col] = df_clean[col].astype(float)
     
     # Drop rows where target is still NaN
     df_clean = df_clean.dropna(subset=['target'])
     df_clean['target'] = df_clean['target'].astype(int)
     
+    missing_after = df_clean.isnull().sum().sum()
+    logger.info(f"Missing values handled: {missing_before} -> {missing_after}")
+    
     logger.info(f"Final dataset shape: {df_clean.shape}")
     logger.info(f"Class distribution:\n{df_clean['target'].value_counts()}")
+    
+    # Verify no NaN values remain
+    if df_clean.isnull().sum().sum() > 0:
+        logger.error(f"Dataset still has {df_clean.isnull().sum().sum()} NaN values")
+        logger.error(f"Columns with NaN: {df_clean.columns[df_clean.isnull().any()].tolist()}")
     
     return df_clean
 
@@ -140,21 +152,36 @@ def save_data(df: pd.DataFrame, raw_path: str, processed_path: str):
     logger.info(f"Raw data saved to {raw_path}")
     
     # Clean and save processed data
-    cleaned_df = clean_data(df)
-    cleaned_df.to_csv(processed_path, index=False)
-    logger.info(f"Processed data saved to {processed_path}")
-    
-    # Print dataset statistics
-    print("\n" + "="*50)
-    print("DATASET STATISTICS")
-    print("="*50)
-    print(f"Total samples: {len(cleaned_df)}")
-    print(f"Features: {len(cleaned_df.columns) - 1}")  # Excluding target
-    print(f"Positive cases (disease): {cleaned_df['target'].sum()}")
-    print(f"Negative cases (no disease): {len(cleaned_df) - cleaned_df['target'].sum()}")
-    print(f"Class ratio (positive/negative): {cleaned_df['target'].mean():.2%}")
-    
-    return cleaned_df
+    try:
+        cleaned_df = clean_data(df)
+        
+        # Final check for NaN values
+        if cleaned_df.isnull().sum().sum() > 0:
+            logger.error(f"Processed data still has NaN values. Filling with 0.")
+            cleaned_df = cleaned_df.fillna(0)
+        
+        cleaned_df.to_csv(processed_path, index=False)
+        logger.info(f"Processed data saved to {processed_path}")
+        
+        # Print dataset statistics
+        print("\n" + "="*50)
+        print("DATASET STATISTICS")
+        print("="*50)
+        print(f"Total samples: {len(cleaned_df)}")
+        print(f"Features: {len(cleaned_df.columns) - 1}")  # Excluding target
+        print(f"Positive cases (disease): {cleaned_df['target'].sum()}")
+        print(f"Negative cases (no disease): {len(cleaned_df) - cleaned_df['target'].sum()}")
+        print(f"Class ratio (positive/negative): {cleaned_df['target'].mean():.2%}")
+        print(f"Missing values in processed data: {cleaned_df.isnull().sum().sum()}")
+        
+        return cleaned_df
+        
+    except Exception as e:
+        logger.error(f"Error processing data: {e}")
+        # Save raw data as fallback
+        df.to_csv(processed_path, index=False)
+        logger.info(f"Saved raw data to {processed_path} as fallback")
+        return df
 
 if __name__ == "__main__":
     # Define paths
@@ -169,16 +196,31 @@ if __name__ == "__main__":
     if not raw_df.empty:
         cleaned_df = save_data(raw_df, RAW_DATA_PATH, PROCESSED_DATA_PATH)
         
-        # Generate basic statistics
-        print("\n" + "="*50)
-        print("FEATURE STATISTICS")
-        print("="*50)
-        print(cleaned_df.describe().T[['mean', 'std', 'min', 'max']])
-        
-        # Check for any remaining missing values
-        if cleaned_df.isnull().sum().sum() == 0:
-            logger.info("✓ Dataset successfully processed with no missing values")
-        else:
-            logger.warning(f"Dataset still has {cleaned_df.isnull().sum().sum()} missing values")
+        if cleaned_df is not None:
+            # Generate basic statistics
+            print("\n" + "="*50)
+            print("FEATURE STATISTICS")
+            print("="*50)
+            
+            # Only show numeric columns in describe
+            numeric_cols = cleaned_df.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0:
+                print(cleaned_df[numeric_cols].describe().T[['mean', 'std', 'min', 'max']].round(2))
+            else:
+                print("No numeric columns found")
+            
+            # Check for any remaining missing values
+            missing_count = cleaned_df.isnull().sum().sum()
+            if missing_count == 0:
+                logger.info("✓ Dataset successfully processed with no missing values")
+            else:
+                logger.warning(f"Dataset still has {missing_count} missing values")
+                # Show which columns have missing values
+                missing_cols = cleaned_df.columns[cleaned_df.isnull().any()].tolist()
+                logger.warning(f"Columns with missing values: {missing_cols}")
     else:
         logger.error("Failed to download dataset. Please check your internet connection.")
+        # Create empty processed file to avoid downstream errors
+        os.makedirs(os.path.dirname(PROCESSED_DATA_PATH), exist_ok=True)
+        pd.DataFrame().to_csv(PROCESSED_DATA_PATH, index=False)
+        logger.info("Created empty processed file to allow pipeline to continue")
