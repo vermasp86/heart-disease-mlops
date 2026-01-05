@@ -19,10 +19,16 @@ from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_
 import prometheus_client
 
 # Configure logging
+import os
+os.makedirs('logs', exist_ok=True)  # Create logs directory if it doesn't exist
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("logs/api.log"), logging.StreamHandler()],
+    handlers=[
+        logging.FileHandler("logs/api.log"),
+        logging.StreamHandler()
+    ],
 )
 logger = logging.getLogger(__name__)
 
