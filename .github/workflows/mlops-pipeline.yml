@@ -87,7 +87,6 @@ jobs:
       with:
         name: test-report
         path: test-report.html
-
   # Model Training
   train:
     runs-on: ubuntu-latest
@@ -123,48 +122,48 @@ jobs:
         else
           echo "No training script found, creating minimal training"
           python -c "
-          import pandas as pd
-          import numpy as np
-          import joblib
-          from sklearn.ensemble import RandomForestClassifier
-          from sklearn.model_selection import train_test_split
-          
-          # Create sample data
-          np.random.seed(42)
-          n_samples = 100
-          data = {
-              'age': np.random.normal(54, 9, n_samples).astype(int),
-              'sex': np.random.choice([0, 1], n_samples),
-              'cp': np.random.choice([0, 1, 2, 3], n_samples),
-              'trestbps': np.random.normal(131, 18, n_samples).astype(int),
-              'chol': np.random.normal(246, 52, n_samples).astype(int),
-              'fbs': np.random.choice([0, 1], n_samples),
-              'restecg': np.random.choice([0, 1, 2], n_samples),
-              'thalach': np.random.normal(149, 23, n_samples).astype(int),
-              'exang': np.random.choice([0, 1], n_samples),
-              'oldpeak': np.random.exponential(1.0, n_samples).round(1),
-              'slope': np.random.choice([0, 1, 2], n_samples),
-              'target': np.random.choice([0, 1], n_samples, p=[0.55, 0.45])
-          }
-          
-          df = pd.DataFrame(data)
-          
-          # Train model
-          X = df.drop('target', axis=1)
-          y = df['target']
-          X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-          
-          model = RandomForestClassifier(n_estimators=20, random_state=42)
-          model.fit(X_train, y_train)
-          
-          # Save model
-          import os
-          os.makedirs('models', exist_ok=True)
-          joblib.dump(model, 'models/best_model.pkl')
-          
-          accuracy = model.score(X_test, y_test)
-          print(f'Model trained with accuracy: {accuracy:.4f}')
-          "
+import pandas as pd
+import numpy as np
+import joblib
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+
+# Create sample data
+np.random.seed(42)
+n_samples = 100
+data = {
+    'age': np.random.normal(54, 9, n_samples).astype(int),
+    'sex': np.random.choice([0, 1], n_samples),
+    'cp': np.random.choice([0, 1, 2, 3], n_samples),
+    'trestbps': np.random.normal(131, 18, n_samples).astype(int),
+    'chol': np.random.normal(246, 52, n_samples).astype(int),
+    'fbs': np.random.choice([0, 1], n_samples),
+    'restecg': np.random.choice([0, 1, 2], n_samples),
+    'thalach': np.random.normal(149, 23, n_samples).astype(int),
+    'exang': np.random.choice([0, 1], n_samples),
+    'oldpeak': np.random.exponential(1.0, n_samples).round(1),
+    'slope': np.random.choice([0, 1, 2], n_samples),
+    'target': np.random.choice([0, 1], n_samples, p=[0.55, 0.45])
+}
+
+df = pd.DataFrame(data)
+
+# Train model
+X = df.drop('target', axis=1)
+y = df['target']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier(n_estimators=20, random_state=42)
+model.fit(X_train, y_train)
+
+# Save model
+import os
+os.makedirs('models', exist_ok=True)
+joblib.dump(model, 'models/best_model.pkl')
+
+accuracy = model.score(X_test, y_test)
+print(f'Model trained with accuracy: {accuracy:.4f}')
+"
         fi
     
     - name: Save model artifacts
@@ -176,7 +175,7 @@ jobs:
           reports/
           mlruns/
         if-no-files-found: warn
-
+        
   # Build and Push Docker Image
   build:
     runs-on: ubuntu-latest
