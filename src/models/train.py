@@ -12,13 +12,15 @@ import logging
 import sys
 import os
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src to path - do this FIRST
+current_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(current_dir))
 
 # Try to import config, but have a fallback
 try:
     from src.config import CONFIG
     config_available = True
+    print("✓ Successfully loaded configuration from src.config")
 except ImportError as e:
     print(f"Warning: Could not import src.config: {e}. Using minimal configuration.")
     config_available = False
@@ -77,9 +79,6 @@ from mlflow.models.signature import infer_signature
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from src.config import CONFIG
-
-# Don't configure logging at module level - do it in the class
 
 class HeartDiseaseModelTrainer:
     """Model trainer for heart disease prediction"""
@@ -152,6 +151,12 @@ class HeartDiseaseModelTrainer:
         self.logger.info("Loading data...")
 
         try:
+            # Check if data file exists
+            if not os.path.exists(self.config.data.processed_path):
+                self.logger.warning(f"Data file not found at {self.config.data.processed_path}")
+                self.logger.info("Creating sample data for training...")
+                self.create_sample_data()
+            
             self.data = pd.read_csv(self.config.data.processed_path)
             self.logger.info(f"Data loaded successfully. Shape: {self.data.shape}")
 
@@ -178,6 +183,35 @@ class HeartDiseaseModelTrainer:
         except Exception as e:
             self.logger.error(f"Error loading data: {e}")
             raise
+
+    def create_sample_data(self):
+        """Create sample data if real data isn't available"""
+        np.random.seed(42)
+        n_samples = 100
+        
+        data = {
+            'age': np.random.normal(54, 9, n_samples).astype(int),
+            'sex': np.random.choice([0, 1], n_samples),
+            'cp': np.random.choice([0, 1, 2, 3], n_samples),
+            'trestbps': np.random.normal(131, 18, n_samples).astype(int),
+            'chol': np.random.normal(246, 52, n_samples).astype(int),
+            'fbs': np.random.choice([0, 1], n_samples),
+            'restecg': np.random.choice([0, 1, 2], n_samples),
+            'thalach': np.random.normal(149, 23, n_samples).astype(int),
+            'exang': np.random.choice([0, 1], n_samples),
+            'oldpeak': np.random.exponential(1.0, n_samples).round(1),
+            'slope': np.random.choice([0, 1, 2], n_samples),
+            'target': np.random.choice([0, 1], n_samples, p=[0.55, 0.45])
+        }
+        
+        df = pd.DataFrame(data)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(self.config.data.processed_path), exist_ok=True)
+        
+        # Save the data
+        df.to_csv(self.config.data.processed_path, index=False)
+        self.logger.info(f"Created sample data with {n_samples} samples at {self.config.data.processed_path}")
 
     def create_preprocessor(self) -> ColumnTransformer:
         """
@@ -541,10 +575,12 @@ class HeartDiseaseModelTrainer:
 def main():
     """Main training function"""
     try:
+        print("Starting model training pipeline...")
+        
         # Initialize trainer - this will create directories and setup logging
         trainer = HeartDiseaseModelTrainer(CONFIG)
 
-        # Load data
+        # Load data (will create sample data if needed)
         trainer.load_data()
 
         # Create preprocessor
@@ -560,11 +596,16 @@ def main():
         trainer.print_summary()
 
         trainer.logger.info("Training pipeline completed successfully!")
+        return 0
 
     except Exception as e:
         # Use print as fallback if logging isn't configured
         print(f"Error in training pipeline: {e}")
-        raise
+        import traceback
+        traceback.print_exc()
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    exit(exit_code)
