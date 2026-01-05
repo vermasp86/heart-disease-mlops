@@ -14,8 +14,7 @@ features:
     - restecg
     - exang
     - slope
-    - ca
-    - thal
+    # Note: ca and thal are removed due to many missing values
   numerical:
     - age
     - trestbps
