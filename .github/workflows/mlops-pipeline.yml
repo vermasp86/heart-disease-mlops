@@ -87,6 +87,7 @@ jobs:
       with:
         name: test-report
         path: test-report.html
+
   # Model Training
   train:
     runs-on: ubuntu-latest
@@ -175,7 +176,7 @@ print(f'Model trained with accuracy: {accuracy:.4f}')
           reports/
           mlruns/
         if-no-files-found: warn
-        
+
   # Build and Push Docker Image
   build:
     runs-on: ubuntu-latest
